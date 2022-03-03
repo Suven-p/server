@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2012, 2017, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2017, 2021, MariaDB Corporation.
+Copyright (c) 2017, 2022, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -38,6 +38,7 @@ Created Apr 25, 2012 Vasil Dimov
 # include "wsrep.h"
 # include "log.h"
 # include "wsrep_mysqld.h"
+# include "mdl.h"
 #endif
 
 #include <vector>
@@ -399,8 +400,29 @@ static void dict_stats_func(void*)
 {
   THD *thd= innobase_create_background_thd("InnoDB statistics");
   set_current_thd(thd);
+
+#ifdef WITH_WSREP
+  MDL_ticket *mdl= nullptr;
+  if (thd_try_acquire_global_mdl(thd, &mdl))
+  {
+    goto try_later;
+  }
+#endif
+
   while (dict_stats_process_entry_from_recalc_pool(thd)) {}
   dict_defrag_process_entries_from_defrag_pool(thd);
+
+#ifdef WITH_WSREP
+  thd_release_global_mdl(thd, &mdl);
+#endif
+  goto end;
+
+#ifdef WITH_WSREP
+try_later:
+  dict_stats_schedule(MIN_RECALC_INTERVAL * 1000);
+#endif
+
+end:
   set_current_thd(nullptr);
   innobase_destroy_background_thd(thd);
 }
