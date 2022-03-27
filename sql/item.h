@@ -3525,6 +3525,31 @@ public:
   privilege_t have_privileges;
   /* field need any privileges (for VIEW creation) */
   bool any_privileges;
+
+private:
+  /*
+    Setting this member to TRUE ensures print() function
+    continues to work even if the table has been dropped.
+    
+    We need this for "ANALYZE statement" feature. Query execution has
+    these steps:
+      1. Run the query.
+      2. Cleanup starts. Temporary tables are destroyed
+      3. print "ANALYZE statement" output, if needed
+      4. Call close_thread_table() for regular tables.
+
+    Step #4 is done after step #3, so "ANALYZE stmt" has no problem printing
+    Item_field objects that refer to regular tables.
+
+    However, Step #3 is done after Step #2. Attempt to print Item_field objects
+    that refer to temporary tables will cause access to freed memory.
+
+    To resolve this, we use refers_to_temp_table member to refer to items 
+    in temporary (work) tables.
+  */
+  bool refers_to_temp_table= false;
+
+public:
   Item_field(THD *thd, Name_resolution_context *context_arg,
              const LEX_CSTRING &db_arg, const LEX_CSTRING &table_name_arg,
 	     const LEX_CSTRING &field_name_arg);
@@ -3538,19 +3563,24 @@ public:
   /*
     Constructor needed to process subselect with temporary tables (see Item)
   */
-  Item_field(THD *thd, Item_field *item);
+  Item_field(THD *thd, Item_field *item,
+    /* If this argument is set then 'refers_to_temp_table' member
+        is forcibly set to TRUE for the constructed 'Item_field' object.
+        Otherwise the value of 'item->refers_to_temp_table' is cloned.*/
+    bool force_setting_refers_to_temp_table= false);
   /*
     Constructor used inside setup_wild(), ensures that field, table,
     and database names will live as long as Item_field (this is important
     in prepared statements).
   */
-  Item_field(THD *thd, Name_resolution_context *context_arg, Field *field);
+  Item_field(THD *thd, Name_resolution_context *context_arg, Field *field,
+    bool refers_to_temp_table_arg= false);
   /*
     If this constructor is used, fix_fields() won't work, because
     db_name, table_name and column_name are unknown. It's necessary to call
     reset_field() before fix_fields() for all fields created this way.
   */
-  Item_field(THD *thd, Field *field);
+  Item_field(THD *thd, Field *field, bool refers_to_temp_table_arg= false);
   Type type() const override { return FIELD_ITEM; }
   bool eq(const Item *item, bool binary_cmp) const override;
   double val_real() override;
@@ -3784,46 +3814,6 @@ public:
     return false;
   }
   bool row_create_items(THD *thd, List<Spvar_definition> *list);
-};
-
-
-/*
-  @brief 
-    Item_temptable_field is the same as Item_field, except that print() 
-    continues to work even if the table has been dropped.
-
-  @detail
-
-    We need this item for "ANALYZE statement" feature. Query execution has 
-    these steps:
-
-      1. Run the query.
-      2. Cleanup starts. Temporary tables are destroyed
-      3. print "ANALYZE statement" output, if needed
-      4. Call close_thread_table() for regular tables.
-
-    Step #4 is done after step #3, so "ANALYZE stmt" has no problem printing
-    Item_field objects that refer to regular tables.
-
-    However, Step #3 is done after Step #2. Attempt to print Item_field objects
-    that refer to temporary tables will cause access to freed memory. 
-    
-    To resolve this, we use Item_temptable_field to refer to items in temporary
-    (work) tables.
-*/
-
-class Item_temptable_field :public Item_field
-{
-public:
-  Item_temptable_field(THD *thd, Name_resolution_context *context_arg, Field *field)
-   : Item_field(thd, context_arg, field) {}
-
-  Item_temptable_field(THD *thd, Field *field)
-   : Item_field(thd, field) {}
-
-  Item_temptable_field(THD *thd, Item_field *item) : Item_field(thd, item) {};
-
-  void print(String *str, enum_query_type query_type) override;
 };
 
 
