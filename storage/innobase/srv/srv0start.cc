@@ -318,7 +318,7 @@ static dberr_t create_log_file(bool create_new_db, lsn_t lsn,
 	log_sys.write_lsn = lsn;
 
 	log_sys.next_checkpoint_no = 0;
-	log_sys.last_checkpoint_lsn = 0;
+	log_sys.last_checkpoint_lsn = log_sys.last_checkpoint_last_lsn = 0;
 
 	memset(log_sys.buf, 0, srv_log_buffer_size);
 	log_block_init(log_sys.buf, lsn);

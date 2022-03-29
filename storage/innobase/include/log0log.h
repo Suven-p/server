@@ -595,6 +595,8 @@ public:
 					/*!< next checkpoint number */
   /** latest completed checkpoint (protected by log_sys.mutex) */
   Atomic_relaxed<lsn_t> last_checkpoint_lsn;
+  /** get_lsn() at the time when last_checkpoint_lsn was updated */
+  lsn_t last_checkpoint_last_lsn;
   /** next checkpoint LSN (protected by log_sys.mutex) */
   lsn_t next_checkpoint_lsn;
   /** whether a checkpoint is pending */

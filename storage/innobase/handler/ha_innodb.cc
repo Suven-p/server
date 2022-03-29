@@ -18280,25 +18280,23 @@ static
 void
 checkpoint_now_set(THD*, st_mysql_sys_var*, void*, const void* save)
 {
-	if (*(my_bool*) save) {
-		mysql_mutex_unlock(&LOCK_global_system_variables);
+  if (*static_cast<const my_bool*>(save))
+  {
+    mysql_mutex_unlock(&LOCK_global_system_variables);
+    mysql_mutex_lock(&log_sys.mutex);
+    while (log_sys.get_lsn() != log_sys.last_checkpoint_last_lsn)
+    {
+      mysql_mutex_unlock(&log_sys.mutex);
+      log_make_checkpoint();
+      mysql_mutex_lock(&log_sys.mutex);
+    }
+    mysql_mutex_unlock(&log_sys.mutex);
 
-		lsn_t lsn;
-
-		while (log_sys.last_checkpoint_lsn.load(
-			       std::memory_order_acquire)
-		       + SIZE_OF_FILE_CHECKPOINT
-		       < (lsn= log_sys.get_lsn(std::memory_order_acquire))) {
-			log_make_checkpoint();
-			log_sys.log.flush();
-		}
-
-		if (dberr_t err = fil_write_flushed_lsn(lsn)) {
-			ib::warn() << "Checkpoint set failed " << err;
-		}
-
-		mysql_mutex_lock(&LOCK_global_system_variables);
-	}
+    if (dberr_t err= fil_write_flushed_lsn(log_sys.last_checkpoint_lsn))
+      sql_print_warning("InnoDB: Checkpoint set failed :%s",
+                        ut_strerr(err));
+    mysql_mutex_lock(&LOCK_global_system_variables);
+  }
 }
 
 /****************************************************************//**

@@ -203,7 +203,7 @@ void log_t::create()
   last_printout_time= time(NULL);
 
   buf_next_to_write= 0;
-  last_checkpoint_lsn= write_lsn= LOG_START_LSN;
+  last_checkpoint_lsn= last_checkpoint_last_lsn= write_lsn= LOG_START_LSN;
   n_log_ios= 0;
   n_log_ios_old= 0;
   log_capacity= 0;

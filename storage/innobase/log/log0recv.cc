@@ -1379,7 +1379,8 @@ ATTRIBUTE_COLD static dberr_t recv_log_recover_pre_10_2()
     srv_log_file_size= 0;
     recv_sys.parse_start_lsn= recv_sys.recovered_lsn= recv_sys.scanned_lsn=
       recv_sys.mlog_checkpoint_lsn = lsn;
-    log_sys.last_checkpoint_lsn= log_sys.next_checkpoint_lsn=
+    log_sys.last_checkpoint_lsn= log_sys.last_checkpoint_last_lsn=
+      log_sys.next_checkpoint_lsn=
       log_sys.write_lsn= log_sys.current_flush_lsn= lsn;
     log_sys.next_checkpoint_no= 0;
     return DB_SUCCESS;
@@ -1465,7 +1466,8 @@ static dberr_t recv_log_recover_10_4()
 		= recv_sys.mlog_checkpoint_lsn = lsn;
 	log_sys.set_lsn(lsn);
 	log_sys.set_flushed_lsn(lsn);
-	log_sys.last_checkpoint_lsn = log_sys.next_checkpoint_lsn
+	log_sys.last_checkpoint_lsn = log_sys.last_checkpoint_lsn
+		= log_sys.next_checkpoint_lsn
 		= log_sys.write_lsn = log_sys.current_flush_lsn = lsn;
 	log_sys.next_checkpoint_no = 0;
 	return DB_SUCCESS;
@@ -3432,17 +3434,19 @@ recv_recovery_from_checkpoint_start(lsn_t flush_lsn)
 
 	ut_ad(RECV_SCAN_SIZE <= srv_log_buffer_size);
 
-	const lsn_t	end_lsn = mach_read_from_8(
-		buf + LOG_CHECKPOINT_END_LSN);
+	const lsn_t	end_lsn = log_sys.last_checkpoint_last_lsn
+		= mach_read_from_8(buf + LOG_CHECKPOINT_END_LSN);
 
 	ut_ad(recv_sys.pages.empty());
 	contiguous_lsn = checkpoint_lsn;
 	switch (log_sys.log.format) {
 	case 0:
+		log_sys.last_checkpoint_last_lsn = checkpoint_lsn;
 		mysql_mutex_unlock(&log_sys.mutex);
 		return DB_SUCCESS;
 	default:
 		if (end_lsn == 0) {
+			log_sys.last_checkpoint_last_lsn = checkpoint_lsn;
 			break;
 		}
 		if (end_lsn >= checkpoint_lsn) {
